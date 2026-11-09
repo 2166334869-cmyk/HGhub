@@ -44,7 +44,9 @@ jobs:
 
         run: |
 
-          brew install xcodegen cocoapods
+          brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+
+          pod --version
 
           pnpm install --frozen-lockfile
 
