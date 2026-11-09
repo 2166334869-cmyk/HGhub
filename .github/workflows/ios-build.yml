@@ -8,13 +8,23 @@ jobs:
 
   build:
 
+    name: Build unsigned iOS IPA
+
     runs-on: macos-15-intel
 
+    permissions:
+
+      contents: read
+
     steps:
+
+      # 1. 下载项目源码
 
       - name: Checkout source
 
         uses: actions/checkout@v4
+
+      # 2. 安装 Node.js
 
       - name: Setup Node.js
 
@@ -24,6 +34,8 @@ jobs:
 
           node-version: '22'
 
+      # 3. 安装 pnpm
+
       - name: Setup pnpm
 
         uses: pnpm/action-setup@v4
@@ -32,6 +44,8 @@ jobs:
 
           version: '10'
 
+      # 4. 安装 Rust 和 iOS 编译目标
+
       - name: Setup Rust
 
         uses: dtolnay/rust-toolchain@stable
@@ -39,6 +53,8 @@ jobs:
         with:
 
           targets: aarch64-apple-ios
+
+      # 5. 安装依赖
 
       - name: Install dependencies
 
@@ -50,13 +66,29 @@ jobs:
 
           pnpm install --frozen-lockfile
 
+      # 6. 生成 iOS 工程
+
       - name: Initialize iOS
 
-        run: pnpm tauri ios init --ci
+        run: |
+
+          pnpm tauri ios init --ci
+
+      # 7. 编译前端资源
+
+      - name: Build frontend
+
+        run: |
+
+          pnpm build
+
+      # 8. 无签名构建 iOS 应用
 
       - name: Build unsigned iOS app
 
         run: |
+
+          set -e
 
           cd src-tauri/gen/apple
 
@@ -87,29 +119,74 @@ jobs:
             PROVISIONING_PROFILE_SPECIFIER="" \
 
             build
-      - name: Package unsigned IPA
+
+      # 9. 查找编译生成的 APP
+
+      - name: Check iOS app
 
         run: |
 
-          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          set -e
 
-          APP_PATH=$(find "$RUNNER_TEMP/ios-build/Build/Products/Release-iphoneos" \
+          APP_DIR="$RUNNER_TEMP/ios-build/Build/Products/Release-iphoneos"
 
-            -maxdepth 1 -name "*.app" -type d | head -n 1)
+          echo "Checking build output..."
+
+          ls -la "$APP_DIR"
+
+          APP_PATH=$(find "$APP_DIR" \
+
+            -maxdepth 1 \
+
+            -name "*.app" \
+
+            -type d \
+
+            | head -n 1)
 
           if [ -z "$APP_PATH" ]; then
 
-            echo "Error: iOS app not found"
+            echo "ERROR: iOS app not found"
 
             exit 1
 
           fi
+
+          echo "Found app: $APP_PATH"
+
+      # 10. 打包未签名 IPA
+
+      - name: Package unsigned IPA
+
+        run: |
+
+          set -e
+
+          APP_DIR="$RUNNER_TEMP/ios-build/Build/Products/Release-iphoneos"
+
+          APP_PATH=$(find "$APP_DIR" \
+
+            -maxdepth 1 \
+
+            -name "*.app" \
+
+            -type d \
+
+            | head -n 1)
+
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
 
           cp -R "$APP_PATH" "$RUNNER_TEMP/ipa/Payload/"
 
           cd "$RUNNER_TEMP/ipa"
 
           zip -qry "$GITHUB_WORKSPACE/HGhub-unsigned.ipa" Payload
+
+          echo "IPA created successfully"
+
+          ls -lh "$GITHUB_WORKSPACE/HGhub-unsigned.ipa"
+
+      # 11. 上传 IPA 文件
 
       - name: Upload IPA
 
@@ -123,4 +200,4 @@ jobs:
 
           if-no-files-found: error
 
-      
+          retention-days: 7
