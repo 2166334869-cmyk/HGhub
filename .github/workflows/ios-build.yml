@@ -1,0 +1,77 @@
+name: Build HGhub iOS IPA
+
+on:
+
+  workflow_dispatch:
+
+jobs:
+
+  build:
+
+    runs-on: macos-15
+
+    steps:
+
+      - name: Checkout source
+
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+
+        uses: actions/setup-node@v4
+
+        with:
+
+          node-version: '22'
+
+      - name: Setup pnpm
+
+        uses: pnpm/action-setup@v4
+
+        with:
+
+          version: '10'
+
+      - name: Setup Rust
+
+        uses: dtolnay/rust-toolchain@stable
+
+        with:
+
+          targets: aarch64-apple-ios
+
+      - name: Install dependencies
+
+        run: |
+
+          brew install xcodegen cocoapods
+
+          pnpm install --frozen-lockfile
+
+      - name: Initialize iOS
+
+        run: pnpm tauri ios init --ci
+
+      - name: Build iOS
+
+        run: pnpm tauri ios build --export-method debugging
+
+        env:
+
+          CODE_SIGNING_ALLOWED: "NO"
+
+      - name: Upload build artifacts
+
+        if: always()
+
+        uses: actions/upload-artifact@v4
+
+        with:
+
+          name: HGhub-iOS-build
+
+          path: |
+
+            src-tauri/gen/apple/build/**/*.ipa
+
+            src-tauri/gen/apple/build/**/*.app
