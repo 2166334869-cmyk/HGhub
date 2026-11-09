@@ -54,7 +54,7 @@ jobs:
 
         run: pnpm tauri ios init --ci
 
-          - name: Build unsigned iOS app
+      - name: Build unsigned iOS app
 
         run: |
 
