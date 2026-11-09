@@ -54,11 +54,13 @@ jobs:
 
           targets: aarch64-apple-ios
 
-      # 5. 安装项目依赖
+      # 5. 安装依赖
 
       - name: Install dependencies
 
         run: |
+
+          set -e
 
           brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
 
@@ -66,7 +68,21 @@ jobs:
 
           pnpm install --frozen-lockfile
 
-      # 6. 初始化 iOS 工程
+      # 6. 升级 Tauri CLI
+
+      - name: Upgrade Tauri CLI
+
+        run: |
+
+          set -e
+
+          pnpm add -D @tauri-apps/cli@2.11.4 --save-exact
+
+          pnpm tauri --version
+
+          pnpm tauri ios build --help
+
+      # 7. 初始化 iOS 工程
 
       - name: Initialize iOS
 
@@ -74,53 +90,47 @@ jobs:
 
           pnpm tauri ios init --ci
 
-      # 7. 编译前端
+      # 8. 通过 Tauri 构建无签名 iOS 归档
 
-      - name: Build frontend
-
-        run: |
-
-          pnpm build
-
-      # 8. 无签名编译 iOS APP
-
-      - name: Build unsigned iOS app
+      - name: Build unsigned iOS archive
 
         run: |
 
           set -euxo pipefail
 
-          cd src-tauri/gen/apple
+          pnpm tauri ios build --ci --target aarch64 --no-sign --archive-only
 
-          xcodebuild -project huangguo-client.xcodeproj -scheme huangguo-client_iOS -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/ios-build" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" PROVISIONING_PROFILE_SPECIFIER="" build
+      # 9. 检查构建结果
 
-      # 9. 检查 APP
-
-      - name: Check iOS app
+      - name: Check iOS archive
 
         run: |
 
           set -euo pipefail
 
-          APP_DIR="$RUNNER_TEMP/ios-build/Build/Products/Release-iphoneos"
+          echo "Searching for iOS archive..."
 
-          echo "Checking iOS build output..."
+          find src-tauri/gen/apple -name "*.xcarchive" -type d -print
 
-          ls -la "$APP_DIR"
-
-          APP_PATH="$(find "$APP_DIR" -maxdepth 1 -name '*.app' -type d -print -quit)"
+          APP_PATH="$(find src-tauri/gen/apple -path '*/Products/Applications/*.app' -type d -print -quit)"
 
           if [ -z "$APP_PATH" ]; then
 
-            echo "ERROR: iOS app not found"
+            echo "ERROR: iOS application not found"
 
             exit 1
 
           fi
 
-          echo "Found app: $APP_PATH"
+          echo "Found application: $APP_PATH"
 
-      # 10. 打包未签名 IPA
+          APP_BIN="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP_PATH/Info.plist")"
+
+          test -s "$APP_PATH/$APP_BIN"
+
+          file "$APP_PATH/$APP_BIN"
+
+      # 10. 打包无签名 IPA
 
       - name: Package unsigned IPA
 
@@ -128,13 +138,11 @@ jobs:
 
           set -euo pipefail
 
-          APP_DIR="$RUNNER_TEMP/ios-build/Build/Products/Release-iphoneos"
-
-          APP_PATH="$(find "$APP_DIR" -maxdepth 1 -name '*.app' -type d -print -quit)"
+          APP_PATH="$(find src-tauri/gen/apple -path '*/Products/Applications/*.app' -type d -print -quit)"
 
           if [ -z "$APP_PATH" ]; then
 
-            echo "ERROR: iOS app not found"
+            echo "ERROR: iOS application not found"
 
             exit 1
 
@@ -142,17 +150,17 @@ jobs:
 
           mkdir -p "$RUNNER_TEMP/ipa/Payload"
 
-          cp -R "$APP_PATH" "$RUNNER_TEMP/ipa/Payload/"
+          ditto "$APP_PATH" "$RUNNER_TEMP/ipa/Payload/$(basename "$APP_PATH")"
 
           cd "$RUNNER_TEMP/ipa"
 
           zip -qry "$GITHUB_WORKSPACE/HGhub-unsigned.ipa" Payload
 
-          echo "IPA package created"
+          echo "IPA package created successfully"
 
           ls -lh "$GITHUB_WORKSPACE/HGhub-unsigned.ipa"
 
-      # 11. 上传 IPA
+      # 11. 上传 IPA 安装包
 
       - name: Upload IPA
 
