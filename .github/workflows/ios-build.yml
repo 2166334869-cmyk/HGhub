@@ -54,7 +54,7 @@ jobs:
 
         run: pnpm tauri ios init --ci
 
-      - name: Build unsigned iOS app
+          - name: Build unsigned iOS app
 
         run: |
 
@@ -78,10 +78,15 @@ jobs:
 
             CODE_SIGNING_REQUIRED=NO \
 
+            CODE_SIGN_STYLE=Manual \
+
             CODE_SIGN_IDENTITY="" \
 
-            build
+            DEVELOPMENT_TEAM="" \
 
+            PROVISIONING_PROFILE_SPECIFIER="" \
+
+            build
       - name: Package unsigned IPA
 
         run: |
