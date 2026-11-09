@@ -18,13 +18,13 @@ jobs:
 
     steps:
 
-      # 1. 下载项目源码
+      # 1. 下载源码
 
       - name: Checkout source
 
         uses: actions/checkout@v4
 
-      # 2. 安装 Node.js
+      # 2. 配置 Node.js
 
       - name: Setup Node.js
 
@@ -34,7 +34,7 @@ jobs:
 
           node-version: '22'
 
-      # 3. 安装 pnpm
+      # 3. 配置 pnpm
 
       - name: Setup pnpm
 
@@ -44,7 +44,7 @@ jobs:
 
           version: '10'
 
-      # 4. 安装 Rust 和 iOS 编译目标
+      # 4. 配置 Rust
 
       - name: Setup Rust
 
@@ -54,7 +54,7 @@ jobs:
 
           targets: aarch64-apple-ios
 
-      # 5. 安装依赖
+      # 5. 安装项目依赖
 
       - name: Install dependencies
 
@@ -66,7 +66,7 @@ jobs:
 
           pnpm install --frozen-lockfile
 
-      # 6. 生成 iOS 工程
+      # 6. 初始化 iOS 工程
 
       - name: Initialize iOS
 
@@ -74,7 +74,7 @@ jobs:
 
           pnpm tauri ios init --ci
 
-      # 7. 编译前端资源
+      # 7. 编译前端
 
       - name: Build frontend
 
@@ -82,67 +82,33 @@ jobs:
 
           pnpm build
 
-      # 8. 无签名构建 iOS 应用
+      # 8. 无签名编译 iOS APP
 
       - name: Build unsigned iOS app
 
         run: |
 
-          set -e
+          set -euxo pipefail
 
           cd src-tauri/gen/apple
 
-          xcodebuild \
+          xcodebuild -project huangguo-client.xcodeproj -scheme huangguo-client_iOS -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/ios-build" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" PROVISIONING_PROFILE_SPECIFIER="" build
 
-            -project huangguo-client.xcodeproj \
-
-            -scheme huangguo-client_iOS \
-
-            -configuration Release \
-
-            -sdk iphoneos \
-
-            -destination 'generic/platform=iOS' \
-
-            -derivedDataPath "$RUNNER_TEMP/ios-build" \
-
-            CODE_SIGNING_ALLOWED=NO \
-
-            CODE_SIGNING_REQUIRED=NO \
-
-            CODE_SIGN_STYLE=Manual \
-
-            CODE_SIGN_IDENTITY="" \
-
-            DEVELOPMENT_TEAM="" \
-
-            PROVISIONING_PROFILE_SPECIFIER="" \
-
-            build
-
-      # 9. 查找编译生成的 APP
+      # 9. 检查 APP
 
       - name: Check iOS app
 
         run: |
 
-          set -e
+          set -euo pipefail
 
           APP_DIR="$RUNNER_TEMP/ios-build/Build/Products/Release-iphoneos"
 
-          echo "Checking build output..."
+          echo "Checking iOS build output..."
 
           ls -la "$APP_DIR"
 
-          APP_PATH=$(find "$APP_DIR" \
-
-            -maxdepth 1 \
-
-            -name "*.app" \
-
-            -type d \
-
-            | head -n 1)
+          APP_PATH="$(find "$APP_DIR" -maxdepth 1 -name '*.app' -type d -print -quit)"
 
           if [ -z "$APP_PATH" ]; then
 
@@ -160,19 +126,19 @@ jobs:
 
         run: |
 
-          set -e
+          set -euo pipefail
 
           APP_DIR="$RUNNER_TEMP/ios-build/Build/Products/Release-iphoneos"
 
-          APP_PATH=$(find "$APP_DIR" \
+          APP_PATH="$(find "$APP_DIR" -maxdepth 1 -name '*.app' -type d -print -quit)"
 
-            -maxdepth 1 \
+          if [ -z "$APP_PATH" ]; then
 
-            -name "*.app" \
+            echo "ERROR: iOS app not found"
 
-            -type d \
+            exit 1
 
-            | head -n 1)
+          fi
 
           mkdir -p "$RUNNER_TEMP/ipa/Payload"
 
@@ -182,11 +148,11 @@ jobs:
 
           zip -qry "$GITHUB_WORKSPACE/HGhub-unsigned.ipa" Payload
 
-          echo "IPA created successfully"
+          echo "IPA package created"
 
           ls -lh "$GITHUB_WORKSPACE/HGhub-unsigned.ipa"
 
-      # 11. 上传 IPA 文件
+      # 11. 上传 IPA
 
       - name: Upload IPA
 
