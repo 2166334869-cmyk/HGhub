@@ -1,4 +1,4 @@
-name: Build HGhub iOS IPA
+name: Build HGhub iOS IPA (Playback Fix)
 
 on:
 
@@ -18,13 +18,27 @@ jobs:
 
     steps:
 
-      # 1. 下载源码
-
       - name: Checkout source
 
         uses: actions/checkout@v4
 
-      # 2. 配置 Node.js
+      - name: Apply playback API fix
+
+        shell: bash
+
+        run: |
+
+          set -euo pipefail
+
+          curl --fail --location --retry 3 --silent --show-error 'https://github.com/zxsos/HGhub/commit/977a40decdddf7dac29537b8b83862d44c6dfece.patch' --output "$RUNNER_TEMP/playback-fix.patch"
+
+          git apply --check "$RUNNER_TEMP/playback-fix.patch"
+
+          git apply "$RUNNER_TEMP/playback-fix.patch"
+
+          git diff --check
+
+          git diff --stat
 
       - name: Setup Node.js
 
@@ -34,8 +48,6 @@ jobs:
 
           node-version: '22'
 
-      # 3. 配置 pnpm
-
       - name: Setup pnpm
 
         uses: pnpm/action-setup@v4
@@ -44,8 +56,6 @@ jobs:
 
           version: '10'
 
-      # 4. 配置 Rust
-
       - name: Setup Rust
 
         uses: dtolnay/rust-toolchain@stable
@@ -53,8 +63,6 @@ jobs:
         with:
 
           targets: aarch64-apple-ios
-
-      # 5. 安装依赖
 
       - name: Install dependencies
 
@@ -68,8 +76,6 @@ jobs:
 
           pnpm install --frozen-lockfile
 
-      # 6. 升级 Tauri CLI
-
       - name: Upgrade Tauri CLI
 
         run: |
@@ -80,17 +86,9 @@ jobs:
 
           pnpm tauri --version
 
-          pnpm tauri ios build --help
-
-      # 7. 初始化 iOS 工程
-
       - name: Initialize iOS
 
-        run: |
-
-          pnpm tauri ios init --ci
-
-      # 8. 通过 Tauri 构建无签名 iOS 归档
+        run: pnpm tauri ios init --ci
 
       - name: Build unsigned iOS archive
 
@@ -100,23 +98,19 @@ jobs:
 
           pnpm tauri ios build --ci --target aarch64 --no-sign --archive-only
 
-      # 9. 检查构建结果
-
       - name: Check iOS archive
 
         run: |
 
           set -euo pipefail
 
-          echo "Searching for iOS archive..."
-
-          find src-tauri/gen/apple -name "*.xcarchive" -type d -print
+          find src-tauri/gen/apple -name '*.xcarchive' -type d -print
 
           APP_PATH="$(find src-tauri/gen/apple -path '*/Products/Applications/*.app' -type d -print -quit)"
 
           if [ -z "$APP_PATH" ]; then
 
-            echo "ERROR: iOS application not found"
+            echo 'ERROR: iOS application not found'
 
             exit 1
 
@@ -130,8 +124,6 @@ jobs:
 
           file "$APP_PATH/$APP_BIN"
 
-      # 10. 打包无签名 IPA
-
       - name: Package unsigned IPA
 
         run: |
@@ -142,7 +134,7 @@ jobs:
 
           if [ -z "$APP_PATH" ]; then
 
-            echo "ERROR: iOS application not found"
+            echo 'ERROR: iOS application not found'
 
             exit 1
 
@@ -154,13 +146,9 @@ jobs:
 
           cd "$RUNNER_TEMP/ipa"
 
-          zip -qry "$GITHUB_WORKSPACE/HGhub-unsigned.ipa" Payload
+          zip -qry "$GITHUB_WORKSPACE/HGhub-playback-fix-unsigned.ipa" Payload
 
-          echo "IPA package created successfully"
-
-          ls -lh "$GITHUB_WORKSPACE/HGhub-unsigned.ipa"
-
-      # 11. 上传 IPA 安装包
+          ls -lh "$GITHUB_WORKSPACE/HGhub-playback-fix-unsigned.ipa"
 
       - name: Upload IPA
 
@@ -168,9 +156,9 @@ jobs:
 
         with:
 
-          name: HGhub-iOS-unsigned
+          name: HGhub-iOS-playback-fix-unsigned
 
-          path: HGhub-unsigned.ipa
+          path: HGhub-playback-fix-unsigned.ipa
 
           if-no-files-found: error
 
